@@ -1,12 +1,11 @@
-from cifrado import Transposicion
 from arbolb import Arbol_B
+from rsa import RSA
 import json
-import os
 
 class main:
     def __init__(self):
         self.arbol = Arbol_B(3)
-        self.carpeta = "Input"
+        self.key_manager = RSA()
 
     def leerArchivo(self, nombre_archivo):
         with open(nombre_archivo, mode ='r', encoding='utf-8') as archivo:
@@ -38,53 +37,31 @@ class main:
             finally:
                 archivo.close()
 
-    def leerTexto(self):
-        nombre = input("Ingrese el nombre de la persona: ")
-        dpi = input("Ingrese el dpi de la persona: ")
-        llave  = input("Ingrese la contraseña para el cifrado y descifrado: ")
-        transposicion = Transposicion(llave)
-        
-        archivo_conversaciones = {archivo for archivo in os.listdir(self.carpeta) if archivo.startswith(f"CONV-{dpi}")}
+    def validarIdentidad(self, empresa, reclutador, nombre, dpi):
+        datos = f"{nombre}-{dpi}"
+        firma = self.key_manager.sign_data(empresa, reclutador, datos)
+        print(f"Firma generada para {nombre} en {empresa} por reclutador {reclutador}: {firma}")
 
-        if not archivo_conversaciones:
-            print(f"No se encontraron conversaciones con los datos ingresados")
-            return
-
-        persona = self.arbol.buscar_por_nombre_y_dpi(dpi, nombre)
-
-        if not persona:
-            print(f"No se encontro a la persona dentro de nuestros registros")
-            return
-
-        for archivo_conversacion in archivo_conversaciones:
-            ruta_archivo = os.path.join(self.carpeta, archivo_conversacion) 
-            try:
-                with open(ruta_archivo, 'r', encoding='utf-8') as archivo:
-                    contenido = archivo.read()
-
-                datos_encriptados = transposicion.cifrado(contenido)
-                numero_conversacion = archivo_conversacion.split('-')[-1].replace('.txt','')
-                archivo_encriptado = os.path.join('Encriptados', archivo_conversacion.replace('.txt','_encriptado.txt'))
-
-                with open(archivo_encriptado, 'w', encoding='utf-8') as salida:
-                    salida.write(datos_encriptados)
-                print(f"Archivo {numero_conversacion} encriptada exitosamente")
-
-                datos_desencriptados = transposicion.descifrar(datos_encriptados)
-                archivo_desencriptado = os.path.join('Desencriptados', archivo_conversacion.replace('.txt', '_desencriptado.txt'))
-
-                with open(archivo_desencriptado, 'w', encoding='utf-8') as salida:
-                    salida.write(datos_desencriptados)
-                
-                print(f"Conversacion {numero_conversacion} desencriptada y guardada como {archivo_desencriptado}")
-            except FileNotFoundError:
-                print(f"El archivo {ruta_archivo} no fue encontrado")
+        es_valida = self.key_manager.verify_data(empresa, reclutador, datos, firma)
+        if es_valida:
+            print("Identidad verificada correctamente")
+        else:
+            print("No se pudo realizar la verificacion")
 
 if __name__ == '__main__':
     programa = main()
     nombre_archivo = input("Ingrese el nombre del archivo: ")
     programa.leerArchivo(nombre_archivo)
-    programa.leerTexto()
 
-#therese - 1044665857995
-#coty - 1016156267944
+    nombre_persona = input("Ingrese el nombre de la persona que desea buscar: ")
+    resultados = programa.arbol.buscarNombre(nombre_persona)
+
+    if not resultados:
+        print("No se encontró ninguna persona con ese nombre.")
+    else:
+        for persona in resultados:
+             print(f"\nPersona encontrada: {persona['name']}")
+             for company in persona["companies"]:
+                reclutador = persona["recluiter"]
+                programa.key_manager.generarLlaves(company, reclutador)
+                programa.validarIdentidad(company, reclutador, persona["name"], persona["dpi"])
